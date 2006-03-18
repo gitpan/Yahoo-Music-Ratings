@@ -1,0 +1,6 @@
+Changes
+Makefile.PL
+MANIFEST
+README
+t/Yahoo-Music-Ratings.t
+lib/Yahoo/Music/Ratings.pm

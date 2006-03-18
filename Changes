@@ -1,0 +1,6 @@
+Revision history for Perl extension Yahoo::Music::Ratings.
+
+1.00  Sat Mar  4 07:41:00 2006
+	- original version; created by h2xs 1.23 with options
+		-X -n Yahoo::Music::Ratings
+
