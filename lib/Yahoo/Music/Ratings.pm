@@ -5,29 +5,7 @@ use XML::Simple;
 use strict;
 use warnings;
 
-require Exporter;
-use AutoLoader qw(AUTOLOAD);
-
-our @ISA = qw(Exporter);
-
-# Items to export into callers namespace by default. Note: do not export
-# names by default without a very good reason. Use EXPORT_OK instead.
-# Do not simply export all your public functions/methods/constants.
-
-# This allows declaration	use Yahoo::Music::Ratings ':all';
-# If you do not need this, moving things directly into @EXPORT or @EXPORT_OK
-# will save memory.
-our %EXPORT_TAGS = ( 'all' => [ qw(
-	
-) ] );
-
-our @EXPORT_OK = ( @{ $EXPORT_TAGS{'all'} } );
-
-our @EXPORT = qw(
-	
-);
-
-our $VERSION = '1.00';
+our $VERSION = '2.00';
 
 
 # Preloaded methods go here.
@@ -39,7 +17,10 @@ sub new {
     # Set sessions options
     $this->{options} = shift;
     
-    print "Yahoo::Music::Ratings Progress Output Enabled\n" . '-' x 80 . "\n" if $this->{options}->{progress};
+    print '-' x 80,
+          "\nYahoo::Music::Ratings Progress Output Enabled\n",
+          '-' x 80,
+          "\n" if $this->{options}->{progress};
     
     return $this;
 }
@@ -54,23 +35,118 @@ sub findMemberId {
         
         $ua->max_redirect(0);
         
-        my $response = $ua->get('http://music.yahoo.com/launchcast/membersearch.asp?memberName='.$this->{options}->{memberName} );
+        my $url = 'http://music.yahoo.com/launchcast/membersearch.asp?memberName='.$this->{options}->{memberName};
+        print "Fetching web page\n" if $this->{options}->{progress};
+        my $response = $ua->get( $url );
         
         if ($response->is_success) {
             #print $response->status_line;
+            $this->{errorMessage} = "\nLooks like either Yahoo is down, the membername provided is down or they've changed their site which means this module no longer works. Sorry :(";
             print "$this->{errorMessage}\n" if $this->{options}->{progress};
-            $this->{errorMessage} = "Looks like either Yahoo is down or they've changed their site which means this module no longer works. Sorry :(";
             return( 0 );
         }
         else {
             ($this->{memberid}) = $response->header('Location') =~ m/station\.asp\?u=(\d+)/g;
-            print "Searched for $this->{options}->{memberName}'s memberId: $this->{memberid}\n" if $this->{options}->{progress};
+            print "Found $this->{options}->{memberName}'s memberId: $this->{memberid}\n" if $this->{options}->{progress};
             return( $this->{memberid} );    
         }
     }
 }
 
+# Backward Compatibility with version 1.00
 sub getRatings {
+    my $this = shift;
+    return $this->getSongs();
+}
+
+# Display a list of Song Rankings
+sub getSongs {
+    my $this = shift;
+    
+    # Check if we have a member id, if not, return 0
+    return 0 unless $this->_checkIfMemberId() ;
+    
+    # Reset the data hash as to not colide with old data
+    undef($this->{data});
+    
+    print "Loading Ratings Pages\n" if $this->{options}->{progress};
+    if ( $this->_parseRatings( 0, 1 ) ){
+        for(my $i=1; $i < $this->{totalPages}; $i++){
+            $this->_parseRatings( $i, 1 );
+        }
+        
+        return( $this->{data} );
+    }
+    else {
+        return( 0 );
+    }
+     
+}
+
+# Display a list of Album Rankings
+sub getAlbums {
+    my $this = shift;
+    
+    # Check if we have a member id, if not, return 0
+    return 0 unless $this->_checkIfMemberId() ;
+    
+    # Reset the data hash as to not colide with old data
+    undef($this->{data});
+    
+    print "Loading Ratings Pages\n" if $this->{options}->{progress};
+    if ( $this->_parseRatings( 0, 2 ) ){
+        for(my $i=1; $i < $this->{totalPages}; $i++){
+            $this->_parseRatings( $i, 2 );
+        }
+        
+        return( $this->{data} );
+    }
+    else {
+        return( 0 );
+    }
+     
+}
+
+# Display a list of Artist Rankings
+sub getArtists {
+    my $this = shift;
+    
+    # Check if we have a member id, if not, return 0
+    return 0 unless $this->_checkIfMemberId() ;
+    
+    # Reset the data hash as to not colide with old data
+    undef($this->{data});
+    
+    print "Loading Ratings Pages\n" if $this->{options}->{progress};
+    if ( $this->_parseRatings( 0, 3 ) ){
+        for(my $i=1; $i < $this->{totalPages}; $i++){
+            $this->_parseRatings( $i, 3 );
+        }
+        
+        return( $this->{data} );
+    }
+    else {
+        return( 0 );
+    }
+     
+}
+
+# Display a list of Song Rankings
+sub getGenres {
+    my $this = shift;
+    
+    # Check if we have a member id, if not, return 0
+    return 0 unless $this->_checkIfMemberId() ;
+    
+    $this->{errorMessage} = "Genre Listing Is not Yet Enabled. This is partly becuase Yahoo has yet to provide much of usfulness.";
+    print "$this->{errorMessage}\n" if $this->{options}->{progress};
+            
+    return( 0 );
+     
+}
+
+# Internal Function to check if we have a member ID yet.
+sub _checkIfMemberId {
     my $this = shift;
     
     # check to see if we have a memberId for this user,
@@ -82,77 +158,143 @@ sub getRatings {
             return( 0 );
         }
     }
-    
-    print "Loading Ratings Pages\n" if $this->{options}->{progress};
-    if ( $this->_parseRatings( 0 ) ){
-        for(my $i=1; $i < $this->{totalPages}; $i++){
-            $this->_parseRatings( $i );
-        }
-        
-        return( $this->{data} );
-    }
-    else {
-        return( 0 );
-    }
-     
 }
 
+# Parse Yahoo XML feed
+# Arguments:
+#	int, pageNumber
+#	int, search type - 1 = song
+#                      2 = album
+#                      3 = artist
+#                      4 = genre
 sub _parseRatings {
     my $this = shift;
     my $page = shift;
+    my $type = shift;
     
     my $xs = new XML::Simple();
     my $ua = LWP::UserAgent->new;
     $ua->timeout(10);
     $ua->env_proxy;
     
-    my $response = $ua->get('http://yme.us.music.yahoo.com/profile/rating_xml.asp?type=1&uid='. $this->{memberid} .'&p='. $page .'&g=undefined&gt=1');
+    my $url = 'http://yme.us.music.yahoo.com/profile/rating_xml.asp?type='. $type .'&uid='. $this->{memberid} .'&p='. $page .'&g=undefined&gt=1';
+    print "Fetching web page " if $this->{options}->{progress};
+    
+    my $response = $ua->get( $url );
     
     if ($response->is_success) {
         my $ref = $xs->XMLin( $response->content );
 
-        $this->{totalPages} = $ref->{SONG_RATINGS}->{SONG_RATING_LIST}->{POSITION}->{PAGES}->{TOTAL};
-    	$this->{currentPage} = $ref->{SONG_RATINGS}->{SONG_RATING_LIST}->{POSITION}->{PAGES}->{CURRENT};
-        print "$this->{currentPage} of $this->{totalPages}\n" if $this->{options}->{progress};
-    
-        foreach my $elem (@{$ref->{SONG_RATINGS}->{SONG_RATING_LIST}->{LIST}->{LIST_ROW}}) {
-            #  {
-            #	'VIEWER_RATING' => {
-            #					   'VALUE' => '-1'
-            #					 },
-            #	'SONG' => {
-            #			  'ID' => '319952',
-            #			  'ALBUM' => {
-            #						 'ID' => '115213',
-            #						 'NAME' => 'The Slim Shady LP (Edited)'
-            #					   },
-            #			  'NAME' => 'My Name Is',
-            #			  'HAS_SAMPLE' => {},
-            #			  'ARTIST' => {
-            #						  'ID' => '289114',
-            #						  'NAME' => 'Eminem'
-            #						},
-            #			  'HAS_TETHDOWNLOAD' => {},
-            #			  'HAS_ODSTREAM' => {},
-            #			  'HAS_PERMDOWNLOAD' => {}
-            #			},
-            #	'USER_RATING' => {
-            #					 'VALUE' => '100'
-            #				   }
-            #  },
-            
-            push(@{$this->{data}}, [
-                         $elem->{SONG}->{ARTIST}->{NAME},
-                         $elem->{SONG}->{NAME},
-                         $elem->{SONG}->{ALBUM}->{NAME},
-                         $elem->{USER_RATING}->{VALUE},
-                         ]);
-        }
+        # Search for type 1, songs
+        if ($type == 1){
+            $this->{totalPages} = $ref->{SONG_RATINGS}->{SONG_RATING_LIST}->{POSITION}->{PAGES}->{TOTAL};
+            $this->{currentPage} = $ref->{SONG_RATINGS}->{SONG_RATING_LIST}->{POSITION}->{PAGES}->{CURRENT};
+            print "$this->{currentPage} of $this->{totalPages}\n" if $this->{options}->{progress};
         
-        return( 1 );
+            foreach my $elem (@{$ref->{SONG_RATINGS}->{SONG_RATING_LIST}->{LIST}->{LIST_ROW}}) {
+                #  {
+                #	'VIEWER_RATING' => {
+                #					   'VALUE' => '-1'
+                #					 },
+                #	'SONG' => {
+                #			  'ID' => '319952',
+                #			  'ALBUM' => {
+                #						 'ID' => '115213',
+                #						 'NAME' => 'The Slim Shady LP (Edited)'
+                #					   },
+                #			  'NAME' => 'My Name Is',
+                #			  'HAS_SAMPLE' => {},
+                #			  'ARTIST' => {
+                #						  'ID' => '289114',
+                #						  'NAME' => 'Eminem'
+                #						},
+                #			  'HAS_TETHDOWNLOAD' => {},
+                #			  'HAS_ODSTREAM' => {},
+                #			  'HAS_PERMDOWNLOAD' => {}
+                #			},
+                #	'USER_RATING' => {
+                #					 'VALUE' => '100'
+                #				   }
+                #  },
+                
+                push(@{$this->{data}}, [
+                             $elem->{SONG}->{ARTIST}->{NAME},
+                             $elem->{SONG}->{NAME},
+                             $elem->{SONG}->{ALBUM}->{NAME},
+                             $elem->{USER_RATING}->{VALUE},
+                             ]);
+            }
+        
+            return( 1 );
+        }
+        # Search for type 2, albums
+        elsif ( $type == 2 ){
+            $this->{totalPages} = $ref->{ALBUM_RATINGS}->{ALBUM_RATING_LIST}->{POSITION}->{PAGES}->{TOTAL};
+            $this->{currentPage} = $ref->{ALBUM_RATINGS}->{ALBUM_RATING_LIST}->{POSITION}->{PAGES}->{CURRENT};
+            print "$this->{currentPage} of $this->{totalPages}\n" if $this->{options}->{progress};
+        
+            foreach my $elem (@{$ref->{ALBUM_RATINGS}->{ALBUM_RATING_LIST}->{LIST}->{LIST_ROW}}) {
+                #{
+                #  'ALBUM' => {
+                #               'ID' => '48792',
+                #               'NAME' => 'New Adventures In Hi-Fi',
+                #               'ARTIST' => {
+                #                             'ID' => '261307',
+                #                             'NAME' => 'R.E.M.'
+                #                           }
+                #             },
+                #  'VIEWER_RATING' => {
+                #                       'VALUE' => '-1'
+                #                     },
+                #  'USER_RATING' => {
+                #                     'VALUE' => '90'
+                #                   }
+                #},
+                
+                push(@{$this->{data}}, [
+                             $elem->{ALBUM}->{ARTIST}->{NAME},
+                             $elem->{ALBUM}->{NAME},
+                             $elem->{USER_RATING}->{VALUE},
+                             ]);
+            }
+        
+            return( 1 );
+        }
+        # Search for type 3, artist
+        elsif ( $type == 3 ){
+            $this->{totalPages} = $ref->{ARTIST_RATINGS}->{ARTIST_RATING_LIST}->{POSITION}->{PAGES}->{TOTAL};
+            $this->{currentPage} = $ref->{ARTIST_RATINGS}->{ARTIST_RATING_LIST}->{POSITION}->{PAGES}->{CURRENT};
+            print "$this->{currentPage} of $this->{totalPages}\n" if $this->{options}->{progress};
+        
+            foreach my $elem (@{$ref->{ARTIST_RATINGS}->{ARTIST_RATING_LIST}->{LIST}->{LIST_ROW}}) {
+                #{
+                #  'VIEWER_RATING' => {
+                #                       'VALUE' => '-1'
+                #                     },
+                #  'ARTIST' => {
+                #                'ID' => '314672',
+                #                'NAME' => 'Bill Engvall'
+                #              },
+                #  'USER_RATING' => {
+                #                     'VALUE' => '60'
+                #                   }
+                #},
+                
+                push(@{$this->{data}}, [
+                             $elem->{ARTIST}->{NAME},
+                             $elem->{USER_RATING}->{VALUE},
+                             ]);
+            }
+        
+            return( 1 );
+        }
+        # Search for type 4, genre
+        elsif ( $type == 4 ){
+            return( 0 );
+        }
     }
     else {
-        $this->{errorMessage} = "Looks like either Yahoo is down or they've changed their site which means this module no longer works. Sorry :(";
+        $this->{errorMessage} = "\nLooks like either Yahoo is down or they've changed their site which means this module no longer works. Sorry :(";
         print "$this->{errorMessage}\n" if $this->{options}->{progress};
         return( 0 );
     }
@@ -235,13 +377,17 @@ returns an object reference
 
 =head2 getRatings
 
+Depreciated, please see getSongs
+
+=head2 getSongs
+
 No arguments are required.
 
 Fetches a members song listing. This function will need to make
 several calls to the Yahoo! Music site and therefore may take upto
 a few minutes on a slow connection.
 
-    my $arrayRef = $ratings->getRatings();
+    my $arrayRef = $ratings->getSongs();
 
 getRatings() will retun 0 if a problem was encountered or an arreyRef
 if everything worked as planned. The arrayRef contains a 3d array of
@@ -255,12 +401,57 @@ Example output:
         'Blood Sugar Sex Magik',    # Album
         '100'                       # Member Song Rating 
     ],
+    
+=head2 getArtists
+
+No arguments are required.
+
+Fetches a members artist ratings. This function will need to make
+several calls to the Yahoo! Music site and therefore may take upto
+a few minutes on a slow connection.
+
+    my $arrayRef = $ratings->getArtists();
+
+getRatings() will retun 0 if a problem was encountered or an arreyRef
+if everything worked as planned. The arrayRef contains a 3d array of
+ratings.
+
+Example output:
+    
+    [
+      'The White Stripes',  # Artist
+      '90'                  # Rating
+    ],
+    
+=head2 getAlbums
+
+No arguments are required.
+
+Fetches a members song listing. This function will need to make
+several calls to the Yahoo! Music site and therefore may take upto
+a few minutes on a slow connection.
+
+    my $arrayRef = $ratings->getAlbums();
+
+getRatings() will retun 0 if a problem was encountered or an arreyRef
+if everything worked as planned. The arrayRef contains a 3d array of
+ratings.
+
+Example output:
+    
+    [
+      'Radiohead',   # Artist    
+      'OK Computer', # Album
+      '90'           # Rating
+    ],
+    
 
 =head2 tab_output [optional]
 
 No arguments required.
 
-You I<must> call C<getRatings()> prior to using this function.
+You I<must> call either C<getSongs()>, C<getArtists()>  or C<getAlbums()>
+prior to using this function.
 
 Will return a large string containing a tab seperated value of
 ratings requested previously in artist alphabetical order. Simply 
@@ -302,7 +493,7 @@ B<Yahoo::Music::Ratings> requires L<XML::Simple> or L<LWP::UserAgent>.
 
 =head1 AUTHOR
 
-Pierre Smolarek <lt>pierre@smolarek.com<gt>
+Pierre Smolarek - smolarek a-t cpan d-o-t org
 
 =head1 COPYRIGHT AND LICENSE
 

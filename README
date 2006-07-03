@@ -1,38 +1,15 @@
-Yahoo-Music-Ratings version 1.00
-================================
-
-This module provides you with a way to retrieve a user's list of
-ratings from Yahoo!'s Music service, including the LaunchCast
-and Unliminted services.
-
-As Yahoo! do not provide an offical feed for a member to download
-their ratings, the methods used within this module are subject to
-change and simply may not work tomorrow. However at the time of 
-writing this README i would suspect the methods used should be
-stable for atleast a few days :)
-
-INSTALLATION
-
-To install this module type the following:
-
-   perl Makefile.PL
-   make
-   make test
-   make install
-
-DEPENDENCIES
-
-This module requires these other modules and libraries:
-
-  XML::Simple
-  LWP::UserAgent
-
-COPYRIGHT AND LICENCE
-
-Copyright (C) 2006 by Pierre Smolarek
-
-This library is free software; you can redistribute it and/or modify
-it under the same terms as Perl itself, either Perl version 5.8.8 or,
-at your option, any later version of Perl 5 you may have available.
+Yahoo::Music::Ratings - A method for retrieving a Yahoo! Music members
+song ratings.
 
 
+This module provides a way to retrieve a user’s list of song ratings
+from Yahoo!’s Music service, including the LaunchCast and Unliminted
+services.
+
+As Yahoo! do not provide an offical feed for a member to download their
+ratings, the methods used within this module are subject to change and
+simply may not work tomorrow. However at the time of writing this
+README i would suspect the methods used should be stable for atleast a
+few days :)
+
+Please perdoc Yahoo::Music::Ratings for full documentation.
